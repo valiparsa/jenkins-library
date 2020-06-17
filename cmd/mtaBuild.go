@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/SAP/jenkins-library/pkg/npm"
 	"os"
 	"path"
 	"strings"
@@ -105,14 +106,11 @@ func runMtaBuild(config mtaBuildOptions,
 		return err
 	}
 
-	err = configureNpmRegistry(config.DefaultNpmRegistry, "default", "", e)
-	if err != nil {
-		return err
-	}
-	err = configureNpmRegistry(config.SapNpmRegistry, "SAP", "@sap", e)
-	if err != nil {
-		return err
-	}
+	err = npm.SetNpmRegistries(
+		&npm.RegistryOptions{
+			DefaultNpmRegistry: config.DefaultNpmRegistry,
+			SapNpmRegistry:     config.SapNpmRegistry,
+		}, e)
 
 	mtaYamlFile := "mta.yaml"
 	mtaYamlFileExists, err := p.FileExists(mtaYamlFile)
@@ -189,6 +187,23 @@ func runMtaBuild(config mtaBuildOptions,
 	}
 
 	commonPipelineEnvironment.mtarFilePath = mtarName
+
+	err = installMavenArtifacts(e, config)
+
+	return err
+}
+
+func installMavenArtifacts(e execRunner, config mtaBuildOptions) error {
+	pomXMLExists, err := piperutils.FileExists("pom.xml")
+	if err != nil {
+		return err
+	}
+	if pomXMLExists {
+		err = maven.InstallMavenArtifacts(e, maven.EvaluateOptions{M2Path: config.M2Path})
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -228,15 +243,15 @@ func getMtarName(config mtaBuildOptions, mtaYamlFile string, p piperutils.FileUt
 		}
 
 		if len(mtaID) == 0 {
-			return "", fmt.Errorf("Invalid mtar name. Was empty")
+			return "", fmt.Errorf("Invalid mtar ID. Was empty")
 		}
 
 		log.Entry().Debugf("mtar name extracted from file \"%s\": \"%s\"", mtaYamlFile, mtaID)
 
-		mtarName = mtaID
+		mtarName = mtaID + ".mtar"
 	}
 
-	return mtarName + ".mtar", nil
+	return mtarName, nil
 
 }
 
@@ -309,26 +324,6 @@ func createMtaYamlFile(mtaYamlFile, applicationName string, p piperutils.FileUti
 	return nil
 }
 
-func configureNpmRegistry(registryURI string, registryName string, scope string, e execRunner) error {
-	if len(registryURI) == 0 {
-		log.Entry().Debugf("No %s npm registry provided via configuration. Leaving npm config untouched.", registryName)
-		return nil
-	}
-
-	log.Entry().Debugf("Setting %s npm registry to \"%s\"", registryName, registryURI)
-
-	key := "registry"
-	if len(scope) > 0 {
-		key = fmt.Sprintf("%s:registry", scope)
-	}
-
-	if err := e.RunExecutable("npm", "config", "set", key, registryURI); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func handleSettingsFiles(config mtaBuildOptions,
 	p piperutils.FileUtils,
 	httpClient piperhttp.Downloader) error {
@@ -341,7 +336,7 @@ func handleSettingsFiles(config mtaBuildOptions,
 
 	} else {
 
-		log.Entry().Debugf("Project settings file not provided via configuation.")
+		log.Entry().Debugf("Project settings file not provided via configuration.")
 	}
 
 	if len(config.GlobalSettingsFile) > 0 {
@@ -351,7 +346,7 @@ func handleSettingsFiles(config mtaBuildOptions,
 		}
 	} else {
 
-		log.Entry().Debugf("Global settings file not provided via configuation.")
+		log.Entry().Debugf("Global settings file not provided via configuration.")
 	}
 
 	return nil
