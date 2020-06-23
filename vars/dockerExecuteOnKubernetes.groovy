@@ -325,7 +325,7 @@ chown -R ${runAsUser}:${fsGroup} ."""
             includes = config.stashIncludes.workspace
             excludes = config.stashExcludes.workspace
         }
-
+        sh "ls -hla .git/objects/pack/"
         stash(
             name: stashName,
             includes: includes,
@@ -349,7 +349,7 @@ private Map getSecurityContext(Map config) {
 }
 
 private void unstashWorkspace(config, prefix) {
-
+    sh "ls -hla .git/objects/pack/"
     unstash "${prefix}-${config.uniqueId}"
     echo "invalidate stash ${prefix}-${config.uniqueId}"
     stash name: "${prefix}-${config.uniqueId}", excludes: '**/*', allowEmpty: true
