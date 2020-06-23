@@ -239,6 +239,7 @@ def getOptions(config) {
 }
 
 void executeOnPod(Map config, utils, Closure body, Script script) {
+    echo "config map: $config"
     /*
      * There could be exceptions thrown by
         - The podTemplate
